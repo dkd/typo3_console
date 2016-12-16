@@ -168,7 +168,7 @@ class ExtensionCommandController extends CommandController
     /**
      * Dump class auto-load
      *
-     * Updates class loading information in non composer managed TYPO3 installations.
+     * Updates class loading information in non Composer managed TYPO3 installations.
      *
      * This command is only needed during development. The extension manager takes care
      * creating or updating this info properly during extension (de-)activation.
@@ -178,7 +178,7 @@ class ExtensionCommandController extends CommandController
     public function dumpAutoloadCommand()
     {
         if (Bootstrap::usesComposerClassLoading()) {
-            $this->output->outputLine('<error>Class loading information is managed by composer. Use "composer dump-autoload" command to update the information.</error>');
+            $this->output->outputLine('<error>Class loading information is managed by Composer. Use "composer dump-autoload" command to update the information.</error>');
             $this->quit(1);
         } else {
             ClassLoadingInformation::dumpClassLoadingInformation();
@@ -187,13 +187,40 @@ class ExtensionCommandController extends CommandController
     }
 
     /**
-     * List all installed extensions
+     * List extensions that are available in the system
      *
-     * @return void
+     * @param bool $active Only show active extensions
+     * @param bool $inactive Only show inactive extensions
+     * @param bool $raw Enable machine readable output (just extension keys separated by line feed)
      */
-    public function listInstalledCommand()
+    public function listCommand($active = false, $inactive = false, $raw = false)
     {
-        $this->outputLine('%s', [implode(',', ExtensionManagementUtility::getLoadedExtensionListArray())]);
+        $extensionInformation = [];
+        if (!$active || $inactive) {
+            $this->emitPackagesMayHaveChangedSignal();
+            $packages = $this->packageManager->getAvailablePackages();
+        } else {
+            $packages = $this->packageManager->getActivePackages();
+        }
+        foreach ($packages as $package) {
+            if ($inactive && $this->packageManager->isPackageActive($package->getPackageKey())) {
+                continue;
+            }
+            $metaData = $package->getPackageMetaData();
+            $extensionInformation[] = [
+                'package_key' => $package->getPackageKey(),
+                'version' => $metaData->getVersion(),
+                'description' => $metaData->getDescription(),
+            ];
+        }
+        if ($raw) {
+            $this->outputLine('%s', [implode(PHP_EOL, array_column($extensionInformation, 'package_key'))]);
+        } else {
+            $this->output->outputTable(
+                $extensionInformation,
+                ['Package key', 'Version', 'Description']
+            );
+        }
     }
 
     /**
@@ -202,58 +229,5 @@ class ExtensionCommandController extends CommandController
     protected function emitPackagesMayHaveChangedSignal()
     {
         $this->signalSlotDispatcher->dispatch('PackageManagement', 'packagesMayHaveChanged');
-    }
-
-    /**
-     * Dump class auto-load (DEPRECATED)
-     *
-     * Updates class loading information.
-     * Use <code>extension:dumpautoload</code> instead!
-     *
-     * @return void
-     * @internal
-     * @deprecated use dumpautoload instead
-     * @see extensionmanager:extension:dumpautoload
-     */
-    public function dumpClassLoadingInformationCommand()
-    {
-        $this->outputLine('<comment>This command is deprecated. Please use <code>./typo3cms extension:dumpautoload</code> instead!</comment>');
-        $this->dumpAutoloadCommand();
-    }
-
-    /**
-     * Install extension (DEPRECATED)
-     *
-     * Installs an extension by key
-     * Use "activate" command instead!
-     *
-     * @param string $extensionKey The "extension_key" format of extension key to be installed
-     * @return void
-     * @internal
-     * @deprecated use activate instead
-     * @see extensionmanager:extension:activate
-     */
-    public function installCommand($extensionKey)
-    {
-        $this->outputLine('<comment>This command is deprecated. Please use <code>./typo3cms extension:activate</code> instead!</comment>');
-        $this->activateCommand([$extensionKey]);
-    }
-
-    /**
-     * Uninstall extension (DEPRECATED)
-     *
-     * Uninstalls an extension by key
-     * Use "deactivate" command instead!
-     *
-     * @param string $extensionKey The "extension_key" format of extension key to be uninstalled
-     * @return void
-     * @internal
-     * @deprecated use deactivate instead
-     * @see extensionmanager:extension:deactivate
-     */
-    public function uninstallCommand($extensionKey)
-    {
-        $this->outputLine('<comment>This command is deprecated. Please use <code>./typo3cms extension:deactivate</code> instead!</comment>');
-        $this->deactivateCommand([$extensionKey]);
     }
 }
